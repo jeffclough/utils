@@ -9,8 +9,6 @@ PYTHON ?= $(shell command -v $(DETECTED_PYTHON) 2>/dev/null || command -v python
 
 VENV      := .venv
 BIN       := $(VENV)/bin
-DEVENV    := .devenv
-DEVBIN    := $(DEVENV)/bin
 
 .PHONY: help venv test lint format clean build publish-test publish dev-install install
 
@@ -19,16 +17,10 @@ DEVBIN    := $(DEVENV)/bin
 help: ## Display this help menu
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-devenv: ## Create virtualenv and install project in editable mode with dev dependencies
-	$(PYTHON) -m venv $(DEVENV)
-	$(DEVBIN)/pip install --upgrade pip
-	$(DEVBIN)/pip install -e .[dev]
-	@echo "\nVirtual environment created in $(DEVENV). Run 'source $(DEVENV)/bin/activate' to enter."
-
-venv: ## Create virtualenv and install project
+venv: ## Create virtualenv and install project in editable mode with dev dependencies
 	$(PYTHON) -m venv $(VENV)
 	$(BIN)/pip install --upgrade pip
-	$(BIN)/pip install .
+	$(BIN)/pip install -e .[dev]
 	@echo "\nVirtual environment created in $(VENV). Run 'source $(VENV)/bin/activate' to enter."
 
 test: ## Run unit tests with pytest
@@ -56,8 +48,8 @@ publish-test: build ## Upload package to TestPyPI
 publish: build ## Upload package to official PyPI
 	$(BIN)/twine upload dist/*
 
-dev-install: ## Install or force-refresh the editable package in pipx
+dev-install: ## Install or force-refresh editable package in pipx
 	pipx install --editable --force .
 
-install: ## Install or force-refresh the editable package in pipx
+install: ## Install or force-refresh standard package in pipx
 	pipx install --force .
