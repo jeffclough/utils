@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jc-handy-utils"
+version = "0.1.0"
+description = "A suite of handy CLI utilities."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name="Jeff Clough", email="jeff@cloughcottage.com" },
+]
+dependencies = [
+    "jc-handy-helpers>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "mypy>=1.8.0",
+    "ruff>=0.3.0",
+    "build>=1.0.0",
+    "twine>=5.0.0",
+]
+
+[project.scripts]
+#ansi = "jc_handy_utils.ansi:main"
+#ascii = "jc_handy_utils.ascii_tool:main"
+#chronorename = "jc_handy_utils.chronorename:main"
+#dump = "jc_handy_utils.dump:main"
+#progress = "jc_handy_utils.progress:main"
+#pygrep = "jc_handy_utils.pygrep:main"
+#re = "jc_handy_utils.re_tool:main"
+#reduce = "jc_handy_utils.reduce_tool:main"
+#slice = "jc_handy_utils.slice_tool:main"
+ts = "jc_handy_utils.ts:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
