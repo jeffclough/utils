@@ -40,7 +40,8 @@ clean: ## Remove build artifacts, cache files, and byte code
 	find . -type f -name "*.py[co]" -delete
 
 build: clean ## Build source distribution and wheel packages
-	$(BIN)/python -m build
+#	$(BIN)/python -m build
+	pyproject-build
 
 publish-test: build ## Upload package to TestPyPI
 	$(BIN)/twine upload --repository testpypi dist/*
