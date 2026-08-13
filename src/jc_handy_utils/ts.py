@@ -42,6 +42,8 @@ def die(msg=None,rc=1):
     sys.exit(rc)
 
 def parse_args():
+    "Return a Namespace instance full of command line values."
+
     def time_unit_divisor(unit):
         time_unit_divisors = dict(
             seconds=1, minutes=60, hours=3600, days=86400, weeks=604800
@@ -191,6 +193,8 @@ def parse_args():
     return opt
 
 def main():
+    "Do all the stuff this program does."
+
     opt=parse_args()
     if opt.args:
         # This is the usual mode of renaming files according to their time.
@@ -287,6 +291,7 @@ def main():
                     opt.time_format, time.localtime(time.time() + opt.offset + opt.utc_offset)
                 )
             )
+    sys.exit(0)
 
 if __name__=="__main__":
     main()
