@@ -2,10 +2,50 @@
 
 import argparse, gzip, os, re, shutil, stat, sys, time
 
+
+class HardBreakParagraphFormatter(argparse.HelpFormatter):
+    """ParagraphRichHelpFormatter that converts trailing backslashes ('\\')
+    into hard line breaks."""
+
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
+        paragraphs = text.split("\n\n")
+        formatted_paragraphs: list[str] = []
+
+        for paragraph in paragraphs:
+            lines = paragraph.splitlines()
+            chunks: list[str] = []
+            current_lines: list[str] = []
+
+            for line in lines:
+                stripped = line.strip()
+                if stripped.endswith("\\"):
+                    # Strip the trailing backslash and push as a hard break chunk
+                    current_lines.append(stripped[:-1].rstrip())
+                    chunks.append(" ".join(current_lines))
+                    current_lines = []
+                else:
+                    current_lines.append(stripped)
+
+            if current_lines:
+                chunks.append(" ".join(current_lines))
+
+            # Fill each chunk independently and join them with single newlines
+            formatted_p = "\n".join(
+                argparse.HelpFormatter._fill_text(self, chunk, width, indent)
+                for chunk in chunks
+            )
+            formatted_paragraphs.append(formatted_p)
+
+        return "\n\n".join(formatted_paragraphs)
+
+
 # By defalt, files with any of these extensions keep their extension when
 # they are renamed with a timestamp.
 # TODO: Make these extensions configurable to the user in some persistent way.
-extensions = """
+# TODO: Since, for a given file, we use the first matching extension, the order
+# of our search does matter. So it might be more sensible to go back to storing
+# them in a list so the user can order them as he wishes.
+default_extensions = set("""
   .3ctype .3fr .a .ac .aiff .ani .anim .ar .arc .ari .arw .asc .asm .awk .bay
   .bin .bmp .bom .book .bsd .c .c++ .cache .cc .cdf .cfg .cgm .cix .class .cmd
   .coffee .collection .com .conf .config .cpp .cr2 .crl .crw .css .csv .cvf .d
@@ -22,24 +62,47 @@ extensions = """
   .scpt .scss .settings .sh .sig .so .sql .sqlite .sqlite3 .sqlitedb .sr2 .srf
   .srw .sst .sublime-keymap .sublime-menu .svg .svn .swf .tab .tar .tcl .test
   .tgz .tif .tiff .todo .tsv .ttf .txt .url .uue .vdi .war .watchr .webm .webp
-  .x3f .xaml .xbm .xls .xml .xsd .yaml .z .zip""".split()
+  .x3f .xaml .xbm .xls .xml .xsd .yaml .z .zip""".split())
 
 prog = os.path.basename(sys.argv[0])
+
 
 def warn(msg):
     "Write msg to stderr preceded with the name of this program."
 
     sys.stderr.flush()
-    print(f"{prog}: {msg}",file=sys.stderr)
+    print(f"{prog}: {msg}", file=sys.stderr)
     sys.stderr.flush()
 
-def die(msg=None,rc=1):
+
+def die(msg=None, rc=1):
     """Write msg, if any, to stderr preceded with the name of this program, and
     terminate with return code 1 (by default)."""
 
     if msg:
-        print(f"{prog}: {msg}",file=sys.stderr)
+        print(f"{prog}: {msg}", file=sys.stderr)
     sys.exit(rc)
+
+
+def cse(s):
+    """Given a string of Comma-separated Extensions, return a set of those
+    extensions, stripping whitespace and providing leading '.' character when
+    missing."""
+
+    # Remove all whitespace, and replace any consecutive dots with single dots.
+    s = re.sub(r"\s", "", s)
+    while ".." in s:
+        s = s.replace("..", ".")
+
+    # Make a list of extensions that are not empty or just a dot.
+    l = [e for e in s.split(",") if e and e != "."]
+
+    # Prepend a '.' character to each extension that's missing one.
+    l = [e if e[0] == "." else "." + e for e in l]
+
+    # Return a set of the extensions in our list.
+    return set(l)
+
 
 def parse_args():
     "Return a Namespace instance full of command line values."
@@ -48,6 +111,7 @@ def parse_args():
         time_unit_divisors = dict(
             seconds=1, minutes=60, hours=3600, days=86400, weeks=604800
         )
+        unit = unit.lower()
         u = [u for u in time_unit_divisors if u.startswith(unit)]
         if u:
             u = u[0]
@@ -56,11 +120,29 @@ def parse_args():
         return time_unit_divisors[u]
 
     ap = argparse.ArgumentParser(
-        description="""This command renames or copies, and optionally
+        formatter_class=HardBreakParagraphFormatter,
+        # formatter_class=argparse.HelpFormatter,
+        description="""%(prog)s renames or copies, and optionally
         compresses, the given file(s) to include the date and time of each
         respective file. This is very handy for rotating log files or saving a
         copy of a script before modifying it. File permissions and times are
-        preserved, even when copying and/or compressing."""
+        preserved, even when copying and/or compressing.""",
+        epilog="""
+        Preserving Extensions:\\
+        Normally, %(prog)s simply appends a timestamp string to the original
+        filename and calls the job done, but this might change a filename from
+        mycode.java to mycode.java.20260813_120004, which isn't very good if
+        you still want it to be recognized as a .java file. Because ".java" is
+        a filename extension that %(prog)s knows to preserve, it renames such a
+        file to mycode.20260813_120004.java instead.
+
+        The EXT_LIST argument to --ext, --ext-add, and --ext-sub is a
+        comma-separated list of extensions. A "." character will be prepended
+        to any extensions that don't already begin with one. The default list
+        is fairly replete, but you may add to or subtract from it using
+        --ext-add and --ext-sub. Use "--ext=." if you want to start from an
+        empty extension list. Additions are performed before subtractions,
+        regardless of their order on the command line.""",
     )
     ap.add_argument(
         "--debug",
@@ -73,7 +155,7 @@ def parse_args():
         dest="age",
         action="store",
         default=None,
-        help="Report the age of the file in the given UNITS. No copying or renaming is performed. If no filename is given on the command line, simply output the current (or offset) time in the given UNITS to standard output. UNITS is one of 'seconds', 'minutes', 'hours', 'days', or 'weeks' (or s, m, h, d, or w, or anywhere in between).",
+        help="Report the age of the file in the given UNITS. No copying or renaming is performed. If no filename is given on the command line, simply output the current (or offset) time in the given UNITS to standard output. UNITS is one of 'seconds', 'minutes', 'hours', 'days', or 'weeks' (or s, m, h, d, or w, or anywhere in between). The age is normally a floating point number, but it is truncated to an integer value if UNITS begins with a capital letter.",
     )
     ap.add_argument(
         "-c",
@@ -84,7 +166,42 @@ def parse_args():
         help="Copy the file rather than rename it.",
     )
     ap.add_argument(
+        "-e",
+        "--ext",
+        metavar="EXT_LIST",
+        dest="ext",
+        action="store",
+        type=cse,
+        default=default_extensions,
+        help='Set the list of extensions to be preserved. See "Preserving Extensions" below for more.',
+    )
+    ap.add_argument(
+        "--ext-add",
+        metavar="EXT_LIST",
+        dest="ext_add",
+        action="store",
+        type=cse,
+        default=set([]),
+        help='Add one or more extenstions to the list of those to be preserved. See "Preserving Extensions" below for more.',
+    )
+    ap.add_argument(
+        "--ext-sub",
+        metavar="EXT_LIST",
+        dest="ext_sub",
+        action="store",
+        type=cse,
+        default=set([]),
+        help='Remove one or more extenstions from the list of those to be preserved. See "Preserving Extensions" below for more.',
+    )
+    ap.add_argument(
+        "--ext-list",
+        dest="ext_list",
+        action="store_true",
+        help="Output our list of preserved extensions and terminate.",
+    )
+    ap.add_argument(
         "--filename",
+        "--filenames",
         dest="filename_only",
         action="store_true",
         default=False,
@@ -95,7 +212,7 @@ def parse_args():
         dest="format",
         action="store",
         default="%(filename)s.%(time)s",
-        help="Specify a new format for a time-stamped filename. (default: %(default)s)",
+        help="Specify a new format for a time-stamped filename. (default: %(default)r)",
     )
     ap.add_argument(
         "-n",
@@ -104,7 +221,7 @@ def parse_args():
         dest="dry_run",
         action="store_true",
         default=False,
-        help="Don't actually rename any files. Only output the new name of each file as it would be renamed.",
+        help="Don't actually rename any files. Only output the new name of each file as it would be renamed or copied. (While --filename outputs only the new filename, this option outputs both the original and new filenames, just as during a normal run.)",
     )
     ap.add_argument(
         "--offset",
@@ -127,14 +244,15 @@ def parse_args():
         dest="time",
         choices=("created", "accessed", "modified"),
         default="modified",
-        help="Choose which time to use for the timestamp. The choices are 'created', 'accessed', or 'modified'. (default: %(default)s)",
+        help="Choose which type of file time to use for the timestamp. The choices are 'created', 'accessed', or 'modified'. (default: %(default)r)",
     )
     ap.add_argument(
         "--time-format",
         dest="time_format",
+        metavar="FORMAT",
         action="store",
         default="%Y%m%d_%H%M%S",
-        help="Specify the format for expressing a file's timestamp. (default: %(default)s)",
+        help="Specify the format for expressing a file's timestamp. (default: %(default)r)",
     )
     ap.add_argument(
         "--utc",
@@ -148,13 +266,13 @@ def parse_args():
         dest="zip",
         action="store_true",
         default=False,
-        help="The file is compressed with gzip after renaming or copying.",
+        help="Compress each file (using an internal gzip function) after renaming or copying. (If copying, it's the new copy that's compressed, leaving the original file unmodified.)",
     )
     ap.add_argument(
-        'args',
-        metavar='FILENAME',
-        nargs='*',
-        help="List of files to be timestamped.",
+        "args",
+        metavar="FILENAME",
+        nargs="*",
+        help="List of files whose names are to be timestamped.",
     )
     opt = ap.parse_args()
 
@@ -162,7 +280,10 @@ def parse_args():
         div = time_unit_divisor(opt.age)
         if div == None:
             die(f"Bad --age value: {opt.age!r}")
+        opt.age_trunc = opt.age[0].isupper()
         opt.age = div
+    else:
+        opt.age_trunc = None
     if opt.offset:
         # Convert our --offset argument to positive or negative seconds.
         m = re.match(
@@ -190,12 +311,43 @@ def parse_args():
     else:
         opt.utc_offset = 0
 
+    # Add to and subtract from our extension set.
+    opt.ext = (opt.ext | opt.ext_add) - opt.ext_sub
+
     return opt
+
 
 def main():
     "Do all the stuff this program does."
 
-    opt=parse_args()
+    opt = parse_args()
+    if opt.debug:
+        v = sys.version_info
+        print(f"Python {v.major}.{v.minor}.{v.micro}")
+        print(f"  {opt.age=}")
+        print(f"  {opt.age_trunc=}")
+        print(f"  {opt.copy=}")
+        print(f"  {opt.filename_only=}")
+        print(f"  {opt.format=}")
+        print(f"  {opt.dry_run=}")
+        print(f"  {opt.offset=}")
+        print(f"  {opt.utc_offset=}")
+        print(f"  {opt.quiet=}")
+        print(f"  {opt.time=}")
+        print(f"  {opt.time_format=}")
+        print(f"  {opt.utc=}")
+        print(f"  {opt.zip=}")
+        print(f"  {opt.ext_list=}")
+        print(f"  {opt.ext_add=}")
+        print(f"  {opt.ext_sub=}")
+        print(f"  {opt.ext=}")
+
+    if opt.ext_list:
+        # Output an alphabetical list of our preserved extensions.
+        if opt.ext:
+            print("\n".join(sorted(list(opt.ext))))
+        sys.exit(0)
+
     if opt.args:
         # This is the usual mode of renaming files according to their time.
         try:
@@ -219,12 +371,15 @@ def main():
                 t += opt.utc_offset
                 t += opt.offset
                 if opt.age:
-                    print(int(time.time() - t + opt.utc_offset) / opt.age)
+                    a = int(time.time() - t + opt.utc_offset) / opt.age
+                    if opt.age_trunc:
+                        a = int(a)
+                    print(a)
                     continue
                 # Format the time as a string.
                 t = time.strftime(opt.time_format, time.localtime(t))
                 # Create the new filename.
-                for ext in extensions:
+                for ext in opt.ext:
                     if f.endswith(ext):
                         # Remove the file extension, but remember what we removed.
                         f = f[: -len(ext)]
@@ -264,7 +419,9 @@ def main():
                                 shutil.copyfileobj(src, dst)
                                 dst.close()
                                 src.close()
-                                shutil.copystat(f, filename)  # Copy file perms and times.
+                                shutil.copystat(
+                                    f, filename
+                                )  # Copy file perms and times.
                                 if not opt.copy:
                                     os.unlink(f)
                             except IOError as e:
@@ -288,10 +445,12 @@ def main():
         else:
             print(
                 time.strftime(
-                    opt.time_format, time.localtime(time.time() + opt.offset + opt.utc_offset)
+                    opt.time_format,
+                    time.localtime(time.time() + opt.offset + opt.utc_offset),
                 )
             )
     sys.exit(0)
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
