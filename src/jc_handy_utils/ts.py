@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import argparse, gzip, os, re, shutil, stat, sys, time
+from importlib.metadata import version as get_package_version, PackageNotFoundError
 
+_version="1.0"
 
 class HardBreakParagraphFormatter(argparse.HelpFormatter):
     """ParagraphRichHelpFormatter that converts trailing backslashes ('\\')
@@ -150,6 +152,11 @@ def parse_args():
         help="Output debugging information.",
     )
     ap.add_argument(
+        "--version",
+        action="store_true",
+        help="Show jc-handy-utils and %(prog)s versions, and terminate.",
+    )
+    ap.add_argument(
         "--age",
         metavar="UNITS",
         dest="age",
@@ -275,6 +282,7 @@ def parse_args():
         help="List of files whose names are to be timestamped.",
     )
     opt = ap.parse_args()
+    opt.prog = ap.prog
 
     if opt.age:
         div = time_unit_divisor(opt.age)
@@ -324,6 +332,7 @@ def main():
     if opt.debug:
         v = sys.version_info
         print(f"Python {v.major}.{v.minor}.{v.micro}")
+        print(f"  {opt.version=}")
         print(f"  {opt.age=}")
         print(f"  {opt.age_trunc=}")
         print(f"  {opt.copy=}")
@@ -341,6 +350,17 @@ def main():
         print(f"  {opt.ext_add=}")
         print(f"  {opt.ext_sub=}")
         print(f"  {opt.ext=}")
+
+    if opt.version:
+        try:
+            package_version=get_package_version("jc-handy-utils")
+        except PackageNotFoundError:
+            package_version="<not installed>"
+        print((
+            f"jc-handy-utils: {package_version}\n"
+            f"{opt.prog}: {_version}"
+        ))
+        sys.exit(0)
 
     if opt.ext_list:
         # Output an alphabetical list of our preserved extensions.
