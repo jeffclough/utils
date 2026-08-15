@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jc-handy-utils"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A suite of handy CLI utilities."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -39,3 +39,7 @@ ts = "jc_handy_utils.ts:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+# The project version comes from src/jc_handy_utils/__init__.py.
+version = { attr = "jc_handy_utils.__version__" }

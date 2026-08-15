@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse, gzip, os, re, shutil, stat, sys, time
-from importlib.metadata import version as get_package_version, PackageNotFoundError
+#from importlib.metadata import version as get_package_version, PackageNotFoundError
 
+try:
+    from jc_handy_utils import __version__ as PROJ_VER
+except ModuleNotFoundError:
+    PROJ_VER=None
 _version="1.0"
 
 class HardBreakParagraphFormatter(argparse.HelpFormatter):
@@ -352,14 +356,10 @@ def main():
         print(f"  {opt.ext=}")
 
     if opt.version:
-        try:
-            package_version=get_package_version("jc-handy-utils")
-        except PackageNotFoundError:
-            package_version="<not installed>"
-        print((
-            f"jc-handy-utils: {package_version}\n"
-            f"{opt.prog}: {_version}"
-        ))
+        if PROJ_VER:
+            print(f"{opt.prog} v{_version} (jc-handy-utils v{PROJ_VER})")
+        else:
+            print(f"{opt.prog} v{_version} (running stand-alone)")
         sys.exit(0)
 
     if opt.ext_list:
