@@ -43,3 +43,6 @@ where = ["src"]
 [tool.setuptools.dynamic]
 # The project version comes from src/jc_handy_utils/__init__.py.
 version = { attr = "jc_handy_utils.__version__" }
+
+[tool.setuptools.package-dir]
+"" = "src"
